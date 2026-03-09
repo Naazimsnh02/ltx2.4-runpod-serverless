@@ -159,8 +159,8 @@ def get_videos(ws, prompt):
     for node_id in outputs:
         node_output = outputs[node_id]
         videos_output = []
-        # Support both list keys ('videos', 'gifs') and singular 'video'
-        for key in ('videos', 'gifs', 'video'):
+        # Support list keys used by SaveVideo nodes: ComfyUI-LTXVideo uses 'animated'/'images'
+        for key in ('videos', 'gifs', 'video', 'animated', 'images'):
             if key not in node_output:
                 continue
             items = node_output[key]
