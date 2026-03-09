@@ -1,0 +1,29 @@
+{
+  "tests": [
+    {
+      "name": "validation_text_to_video",
+      "input": {
+        "prompt": "A cinematic test shot, slow motion",
+        "num_frames": 25,
+        "fps": 24
+      },
+      "timeout": 180000
+    }
+  ],
+  "config": {
+    "gpuTypeId": "NVIDIA GeForce RTX 4090",
+    "gpuCount": 1,
+    "env": [],
+    "allowedCudaVersions": [
+      "12.8",
+      "12.7",
+      "12.6",
+      "12.5",
+      "12.4",
+      "12.3",
+      "12.2",
+      "12.1",
+      "12.0"
+    ]
+  }
+}
