@@ -1,3 +1,4 @@
+[![Runpod](https://api.runpod.io/badge/creativeone86/ltx2.4-runpod-serverless)](https://console.runpod.io/hub/creativeone86/ltx2.4-runpod-serverless)
 # LTX 2.3 22B Video Generation - RunPod Serverless
 
 <p align="center">
