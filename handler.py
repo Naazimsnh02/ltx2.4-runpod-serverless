@@ -13,6 +13,8 @@ import subprocess
 import time
 import random
 import shutil
+import boto3
+from botocore.client import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,6 +91,44 @@ def copy_to_comfyui_input(source_path, target_filename):
     shutil.copy2(source_path, target_path)
     logger.info(f"Copied to ComfyUI input: {target_path}")
     return target_filename
+
+
+def upload_to_s3(file_path: str, job_id: str) -> str | None:
+    """
+    Upload a file to S3 and return a presigned URL valid for 7 days.
+    Returns None if S3 is not configured or upload fails.
+    """
+    bucket   = os.environ.get("S3_BUCKET_NAME")
+    endpoint = os.environ.get("S3_ENDPOINT_URL")
+    region   = os.environ.get("S3_REGION", "us-east-1")
+    key_id   = os.environ.get("AWS_ACCESS_KEY_ID")
+    secret   = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+    if not all([bucket, endpoint, key_id, secret]):
+        return None
+
+    try:
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=key_id,
+            aws_secret_access_key=secret,
+            region_name=region,
+            config=Config(signature_version="s3v4"),
+        )
+        filename  = os.path.basename(file_path)
+        s3_key    = f"outputs/{job_id}/{filename}"
+        s3.upload_file(file_path, bucket, s3_key)
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": s3_key},
+            ExpiresIn=604800,  # 7 days
+        )
+        logger.info(f"Uploaded to S3: {s3_key}  URL: {url[:80]}...")
+        return url
+    except Exception as e:
+        logger.error(f"S3 upload failed: {e}")
+        return None
 
 
 def get_audio_duration(audio_path):
@@ -173,29 +213,23 @@ def get_videos(ws, prompt):
                     continue
                 fullpath = video.get('fullpath')
                 if fullpath and os.path.exists(fullpath):
-                    with open(fullpath, 'rb') as f:
-                        video_data = base64.b64encode(f.read()).decode('utf-8')
-                    videos_output.append(video_data)
-                    logger.info(f"Read video from fullpath: {fullpath}")
+                    videos_output.append(fullpath)
+                    logger.info(f"Found video at fullpath: {fullpath}")
                     continue
                 filename = video.get('filename', '')
                 subfolder = video.get('subfolder', '')
                 output_dir = os.path.join('/ComfyUI/output', subfolder) if subfolder else '/ComfyUI/output'
                 filepath = os.path.join(output_dir, filename)
                 if os.path.exists(filepath):
-                    with open(filepath, 'rb') as f:
-                        video_data = base64.b64encode(f.read()).decode('utf-8')
-                    videos_output.append(video_data)
-                    logger.info(f"Read video from: {filepath}")
+                    videos_output.append(filepath)
+                    logger.info(f"Found video at: {filepath}")
                     continue
                 # Try filename only in /ComfyUI/output (no subfolder)
                 if filename:
                     alt = os.path.join('/ComfyUI/output', filename)
                     if os.path.exists(alt):
-                        with open(alt, 'rb') as f:
-                            video_data = base64.b64encode(f.read()).decode('utf-8')
-                        videos_output.append(video_data)
-                        logger.info(f"Read video from alt path: {alt}")
+                        videos_output.append(alt)
+                        logger.info(f"Found video at alt path: {alt}")
                         continue
                 logger.warning(f"Video entry not found on disk: fullpath={fullpath!r}, filepath={filepath!r}")
         if videos_output:
@@ -368,9 +402,21 @@ def handler(job):
     videos = get_videos(ws, prompt)
     ws.close()
 
+    job_id = job.get("id", str(uuid.uuid4()))
+
     for node_id in videos:
         if videos[node_id]:
-            return {"video": videos[node_id][0]}
+            file_path = videos[node_id][0]
+
+            # Try S3 upload first — avoids RunPod 400 payload-too-large error
+            url = upload_to_s3(file_path, job_id)
+            if url:
+                return {"video_url": url}
+
+            # Fallback: return inline base64 (works for small clips)
+            with open(file_path, 'rb') as f:
+                video_b64 = base64.b64encode(f.read()).decode('utf-8')
+            return {"video": video_b64}
 
     return {"error": "No video output found"}
 

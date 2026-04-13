@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pip install --upgrade pip
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-RUN pip install runpod websocket-client
+RUN pip install runpod websocket-client boto3
 RUN pip install sageattention
 
 WORKDIR /
