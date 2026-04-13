@@ -75,6 +75,18 @@ POST https://api.runpod.ai/v2/{ENDPOINT_ID}/run
 
 ### Response
 
+**With S3 configured (recommended):**
+```json
+{
+  "id": "job-abc123",
+  "status": "COMPLETED",
+  "output": {
+    "s3_key": "outputs/job-abc123/output_00001_.mp4"
+  }
+}
+```
+
+**Without S3 (small clips only):**
 ```json
 {
   "id": "job-abc123",
@@ -85,7 +97,7 @@ POST https://api.runpod.ai/v2/{ENDPOINT_ID}/run
 }
 ```
 
-The `output.video` field contains the generated video as a base64-encoded MP4 file. Decode it and save to disk to get your video.
+When S3 is configured, the handler uploads the generated `.mp4` to your bucket and returns the S3 key. Download it using your S3 client. The base64 fallback is used only when S3 is not configured — for clips over ~15 MB this will fail with a RunPod 400 payload-too-large error.
 
 ### Modes
 
@@ -251,6 +263,30 @@ wget -O /workspace/models/latent_upscale_models/ltx-2.3-spatial-upscaler-x2-1.0.
    - GPU Type: AMPERE_48 (A6000/A40, 48 GB) or ADA_48_PRO (L40/L40S/6000 Ada, 48 GB)
    - Container Disk: 30 GB
    - Network Volume: Attach the volume with pre-downloaded models
+
+### S3 Output Configuration (Required for clips > ~15 MB)
+
+LTX 2.3 generates large video files. RunPod's API rejects inline responses over ~20 MB, causing jobs to show as COMPLETED with no output. The fix is to configure an S3-compatible bucket so the handler uploads the `.mp4` directly and returns an S3 key instead.
+
+Set these environment variables on your RunPod endpoint (**Environment Variables** tab in the endpoint settings):
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `S3_BUCKET_NAME` | Your bucket name | `my-bucket` |
+| `S3_ENDPOINT_URL` | S3-compatible endpoint URL | `https://s3api-us-wa-1.runpod.io` |
+| `S3_REGION` | Bucket region | `us-wa-1` |
+| `AWS_ACCESS_KEY_ID` | S3 access key ID | `user_xxxx` |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret access key | `rps_xxxx` |
+
+**RunPod S3 Storage** (same account, no egress fees):
+1. Go to RunPod console → **Storage** → create a bucket
+2. Generate API credentials for the bucket
+3. Use `https://s3api-<region>.runpod.io` as the endpoint URL
+4. Set the 5 env vars above on your serverless endpoint
+
+When S3 is configured, generated videos are saved under `outputs/<job_id>/output_xxxxx_.mp4` in your bucket. Download them using any S3 client (boto3, AWS CLI, etc.) with the same credentials.
+
+If S3 env vars are missing, the handler falls back to returning base64 — this works for short clips but will fail for anything over ~15 MB.
 
 ## Models
 

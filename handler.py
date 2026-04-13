@@ -119,13 +119,8 @@ def upload_to_s3(file_path: str, job_id: str) -> str | None:
         filename  = os.path.basename(file_path)
         s3_key    = f"outputs/{job_id}/{filename}"
         s3.upload_file(file_path, bucket, s3_key)
-        url = s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": s3_key},
-            ExpiresIn=604800,  # 7 days
-        )
-        logger.info(f"Uploaded to S3: {s3_key}  URL: {url[:80]}...")
-        return url
+        logger.info(f"Uploaded to S3: {s3_key}")
+        return s3_key
     except Exception as e:
         logger.error(f"S3 upload failed: {e}")
         return None
@@ -409,9 +404,9 @@ def handler(job):
             file_path = videos[node_id][0]
 
             # Try S3 upload first — avoids RunPod 400 payload-too-large error
-            url = upload_to_s3(file_path, job_id)
-            if url:
-                return {"video_url": url}
+            s3_key = upload_to_s3(file_path, job_id)
+            if s3_key:
+                return {"s3_key": s3_key}
 
             # Fallback: return inline base64 (works for small clips)
             with open(file_path, 'rb') as f:
